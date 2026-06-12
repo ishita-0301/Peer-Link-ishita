@@ -69,8 +69,8 @@ class Peers:
         self.connect_to_peers()
         self.send_connection_update()
         if not self.isDead:
-            thread_sender = threading.Thread(target=self.gossip_sender_all, daemon=True)
-            thread_sender.start()
+            thread_ping_sender = threading.Thread(target=self.ping_sender, daemon=True)
+            thread_ping_sender.start()
 
 
     def connect_to_seed(self, seed):
@@ -285,3 +285,61 @@ def gossip_sender_peer(self, peer: socket.socket, message_hash: int):
     except Exception as e:
         if self.running_status:
             print(f"Peer({self.ip}:{self.port}) -> Error sending gossip: {e}")
+
+def ping_sender(self):
+        while self.running_status and not self.isDead:
+            for peer_socket in list(self.peer_connections):
+                self.ping_sender_peer(peer_socket)
+            time.sleep(PING_INTERVAL)
+
+            
+def ping_sender_peer(self, peer_socket: socket.socket):
+        if self.isDead or not self.running_status:
+            return
+        try:
+            if peer_socket not in self.ping_tracker:
+                self.ping_tracker[peer_socket] = [time.time(), 0]
+            peer_addr = self.peer_info.get(peer_socket, ("Unknown", "Unknown"))
+            if time.time() - self.ping_tracker[peer_socket][0] >= PING_MAX_WAIT:
+                counter = self.ping_tracker[peer_socket][1]
+                self.ping_tracker[peer_socket] = [time.time(), counter + 1]
+                if self.ping_tracker[peer_socket][1] >= 3:
+                    msg = f"Peer(client)({self.ip}:{self.port}) -> Peer {peer_addr} is dead"
+                    print(msg)
+                    log(msg)
+                    if peer_socket in self.peer_connections:
+                        self.peer_connections.remove(peer_socket)
+                    self.peer_list = [p for p in self.peer_list if p[0:2] != peer_addr]
+                    for seed_socket in self.seed_connections:
+                        dead_msg = f"DEAD_NODE:{peer_addr[0]}:{peer_addr[1]}:{time.strftime('%H:%M:%S')}:{self.ip}:{self.port}\n"
+                        seed_socket.sendall(dead_msg.encode('utf-8'))
+                    peer_socket.close()
+                    return
+            peer_socket.sendall("PING\n".encode('utf-8'))
+            msg = f"Peer(client)({self.ip}:{self.port}) -> Sent PING to {peer_addr}"
+            print(msg)
+            log(msg)
+        except Exception as e:
+            if not self.running_status:
+                return
+            peer_addr = self.peer_info.get(peer_socket, ("Unknown", "Unknown"))
+            if peer_socket not in self.ping_tracker:
+                self.ping_tracker[peer_socket] = [time.time(), 1]
+            else:
+                self.ping_tracker[peer_socket][1] += 1
+            if self.ping_tracker[peer_socket][1] >= 3:
+                msg = f"Peer(client)({self.ip}:{self.port}) -> Peer {peer_addr} dead after ping failures"
+                print(msg)
+                log(msg)
+                if peer_socket in self.peer_connections:
+                    self.peer_connections.remove(peer_socket)
+                for seed_socket in self.seed_connections:
+                    try:
+                        dead_msg = f"DEAD_NODE:{peer_addr[0]}:{peer_addr[1]}:{time.strftime('%H:%M:%S')}:{self.ip}:{self.port}\n"
+                        seed_socket.sendall(dead_msg.encode('utf-8'))
+                    except Exception:
+                        pass
+                try:
+                    peer_socket.close()
+                except Exception:
+                    pass

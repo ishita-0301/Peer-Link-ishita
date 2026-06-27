@@ -94,7 +94,13 @@ class Peers:
         for seed_socket in self.seed_connections:
             try:
                 seed_socket.sendall(f"REQUEST_PEER_LIST:{self.port}\n".encode('utf-8'))
-                peer_list_str = seed_socket.recv(1024).decode('utf-8')
+                raw = b""
+                while not raw.endswith(b"\n"):
+                    chunk = seed_socket.recv(4096)
+                    if not chunk:
+                        break
+                    raw += chunk
+                peer_list_str = raw.decode('utf-8')
                 if peer_list_str:
                     for peer in peer_list_str.split('\n'):
                         if peer:

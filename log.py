@@ -1,12 +1,14 @@
-import threading
-import time
+import logging
 
-lock = threading.Lock()
-LOG_FILE = "OUTPUT.txt"
+logging.basicConfig(
+    filename="OUTPUT.txt",
+    level=logging.INFO,
+    format="%(asctime)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+_logger = logging.getLogger(__name__)
+
 
 def log(message: str):
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    entry = f"{timestamp} - {message}\n"
-    with lock:
-        with open(LOG_FILE, "a") as f:
-            f.write(entry)
+    _logger.info(message)
